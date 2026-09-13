@@ -1,0 +1,40 @@
+{
+  "name": "papyrus-viewer-3d",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared 3D viewer primitive for Papyrus extensions: a renderer-agnostic scene contract and the viewer_3d ExtensionUiProvider card. Domain packs (e.g. papyrus-gnss) emit typed scenes; the WebGL engine is vendored here once, after supply-chain review, so no pack bundles its own.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "default": "./dist/ui.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "papyrus-extension-sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

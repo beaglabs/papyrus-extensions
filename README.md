@@ -10,6 +10,7 @@ Papyrus extensions are versioned NPM packages that add **read-only agent tools**
 | --- | --- |
 | [`papyrus-extension-sdk`](./packages/extension-sdk) | Framework-free contract between core and extensions. No runtime deps; does not import React or Mastra. |
 | [`papyrus-gnss`](./packages/gnss) | First domain pack: GNSS / satellite-orbit parsers (TLE, OMM, SP3, NMEA, SINEX) and SVG viewer cards. |
+| [`papyrus-viewer-3d`](./packages/viewer-3d) | Shared 3D viewer primitive: a renderer-agnostic scene contract and the `viewer_3d` card. Domain packs emit typed scenes; the WebGL engine is vendored here once, after review, so no pack bundles its own. |
 
 ## The contract
 
