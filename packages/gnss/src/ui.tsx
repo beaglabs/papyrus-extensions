@@ -42,21 +42,46 @@ interface SinexView {
   stations: Array<{ code: string; x: number; y: number; z: number; latDeg: number; lonDeg: number; heightM: number; sigma3dMm: number }>
 }
 
-const CHART = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'] as const
-const chartColor = (i: number): string => CHART[i % CHART.length] ?? 'var(--primary)'
-const BORDER = 'hsl(var(--border))'
-const MUTED = 'hsl(var(--muted-foreground))'
-const FG = 'hsl(var(--foreground))'
-const ACCENT = 'hsl(var(--chart-1))'
-const GOOD = 'hsl(var(--chart-2))'
+/**
+ * The card owns its palette.
+ *
+ * Host token systems disagree: shadcn stores HSL triplets and expects `hsl(var(--x))`, while
+ * Papyrus stores hex and uses `var(--x)` bare. A card that reads the host's tokens therefore
+ * paints nothing on one of them, and an invalid SVG paint fails silently — a failed `fill`
+ * becomes black, a failed `stroke` becomes none, so a coloured map degrades to a grey
+ * rectangle with black dots rather than reporting anything.
+ *
+ * These read an optional `--gnss-*` override for a host that wants to theme the viewer, and
+ * otherwise fall back to this self-contained palette, so the same code paints anywhere.
+ * One format throughout: complete colours, never wrapped in hsl(). Mixing the two was the
+ * original defect — `chartColor()` returned a bare token while ACCENT wrapped the same token
+ * in hsl(), and no host can make both valid.
+ */
+const token = (name: string, fallback: string): string => `var(${name}, ${fallback})`
+
+const CHART_FALLBACK = ['#ff5f1f', '#71df98', '#82c9ff', '#ffd36e', '#a78bfa'] as const
+const chartToken = (index: number): string => token(`--gnss-chart-${index + 1}`, CHART_FALLBACK[index] ?? '#ff5f1f')
+const CHART: readonly string[] = CHART_FALLBACK.map((_, index) => chartToken(index))
+const BORDER = token('--gnss-border', '#111111')
+const MUTED = token('--gnss-muted-foreground', '#68655f')
+const MUTED_SURFACE = token('--gnss-muted', '#e8e2d7')
+const FG = token('--gnss-foreground', '#111111')
+const CARD = token('--gnss-card', '#fffdf8')
+const CARD_FG = token('--gnss-card-foreground', '#111111')
+const BACKGROUND = token('--gnss-background', '#f5f1e8')
+const DESTRUCTIVE = token('--gnss-destructive', '#b4322d')
+const PRIMARY = token('--gnss-primary', '#ff5f1f')
+const ACCENT = chartToken(0)
+const GOOD = chartToken(1)
+const chartColor = (i: number): string => CHART[i % CHART.length] ?? PRIMARY
 
 const shell: React.CSSProperties = {
   border: `1px solid ${BORDER}`,
   borderRadius: 10,
   padding: 12,
   margin: '8px 0',
-  background: 'hsl(var(--card))',
-  color: 'hsl(var(--card-foreground))',
+  background: CARD,
+  color: CARD_FG,
 }
 const heading: React.CSSProperties = {
   fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED, margin: '0 0 8px', fontWeight: 600,
@@ -131,13 +156,13 @@ function OrbitViewCard({ view }: { view: OrbitView }) {
     <div style={shell}>
       <p style={heading}>{object.name ?? `Satellite ${object.noradId}`} · ground track ({view.source.toUpperCase()} · SGP4)</p>
       <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} style={{ width: '100%', height: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8 }} role="img" aria-label="Ground track">
-        <rect x={0} y={0} width={MAP_W} height={MAP_H} fill="hsl(var(--muted))" opacity={0.25} />
+        <rect x={0} y={0} width={MAP_W} height={MAP_H} fill={MUTED_SURFACE} opacity={0.25} />
         <Graticule />
         {segments.map((seg, i) => (
           <polyline key={i} fill="none" stroke={ACCENT} strokeWidth={2}
             points={seg.map((p) => equirect(p.lat, p.lon).join(',')).join(' ')} />
         ))}
-        <circle cx={sx} cy={sy} r={5} fill={GOOD} stroke="hsl(var(--card))" strokeWidth={1.5} />
+        <circle cx={sx} cy={sy} r={5} fill={GOOD} stroke={CARD} strokeWidth={1.5} />
       </svg>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '2px 16px', marginTop: 10 }}>
         {rows.map(([k, v]) => (
@@ -189,7 +214,7 @@ function Sp3ViewCard({ view }: { view: Sp3View }) {
       </div>
       <label style={{ fontSize: 12, color: MUTED }}>
         Satellite{' '}
-        <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ background: 'hsl(var(--background))', color: FG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '3px 6px' }}>
+        <select value={selected} onChange={(e) => setSelected(e.target.value)} style={{ background: BACKGROUND, color: FG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '3px 6px' }}>
           {view.header.satelliteIds.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
       </label>
@@ -246,18 +271,18 @@ function TrackMap({ track }: { track: NmeaView['track'] }) {
   const sy = (lat: number): number => H - pad - ((lat - minLat) / (maxLat - minLat || 1e-6)) * (H - 2 * pad)
   const first = track[0]; const last = track[track.length - 1]
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, background: 'hsl(var(--muted))' }} role="img" aria-label="Position track">
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, background: MUTED_SURFACE }} role="img" aria-label="Position track">
       <polyline fill="none" stroke={GOOD} strokeWidth={2.5} points={track.map((p) => `${sx(p.lon)},${sy(p.lat)}`).join(' ')} />
       {first && <circle cx={sx(first.lon)} cy={sy(first.lat)} r={4} fill={ACCENT} />}
-      {last && <circle cx={sx(last.lon)} cy={sy(last.lat)} r={4} fill="hsl(var(--destructive))" />}
+      {last && <circle cx={sx(last.lon)} cy={sy(last.lat)} r={4} fill={DESTRUCTIVE} />}
     </svg>
   )
 }
 
 function snrColor(snr: number): string {
-  if (snr >= 40) return 'hsl(var(--chart-2))'
-  if (snr >= 25) return 'hsl(var(--chart-4))'
-  if (snr > 0) return 'hsl(var(--chart-5))'
+  if (snr >= 40) return GOOD
+  if (snr >= 25) return chartToken(3)
+  if (snr > 0) return chartToken(4)
   return MUTED
 }
 
@@ -317,7 +342,7 @@ function SinexViewCard({ view }: { view: SinexView }) {
     <div style={shell}>
       <p style={heading}>SINEX · {stations.length} station coordinate solutions</p>
       <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} style={{ width: '100%', height: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8 }} role="img" aria-label="Station network">
-        <rect x={0} y={0} width={MAP_W} height={MAP_H} fill="hsl(var(--muted))" opacity={0.25} />
+        <rect x={0} y={0} width={MAP_W} height={MAP_H} fill={MUTED_SURFACE} opacity={0.25} />
         <Graticule />
         {stations.map((s) => {
           const [x, y] = equirect(s.latDeg, s.lonDeg)
