@@ -13,6 +13,19 @@
 
 export type JsonSchema = Record<string, unknown>
 
+/** A declaration to be enforced by the host, never a sandbox by itself. */
+export interface ExtensionExecutionPolicy {
+  authority: 'read_only'
+  compute: {
+    backend: 'inline' | 'wasm' | 'sandboxed_worker'
+    network: false
+    filesystem: 'none' | 'ephemeral'
+    maxMemoryMb: number
+    maxCpuSeconds: number
+    artifactOutput: boolean
+  }
+}
+
 /** A single agent tool contributed by an extension. Must be side-effect free. */
 export interface ExtensionTool {
   /** Unique tool id (also the Mastra tool id and the `tool-<id>` UI part). */
@@ -25,6 +38,7 @@ export interface ExtensionTool {
    * core enforces this at load time via `assertSafe` in collectExtensionTools.
    */
   authority?: 'read_only'
+  executionPolicy?: ExtensionExecutionPolicy
   /** Pure execution: parse/compute and return a `kind`-tagged UI object. */
   execute: (input: Record<string, unknown>) => unknown | Promise<unknown>
 }
@@ -42,6 +56,8 @@ export interface CollectToolsOptions {
    * whose id is on the forbidden (authority-bearing) list.
    */
   assertSafe?: (id: string) => void
+  /** Required to register a tool with a compute policy. Must fail closed. */
+  assertExecutionPolicy?: (policy: ExtensionExecutionPolicy, id: string) => void
 }
 
 /**
@@ -65,6 +81,19 @@ export function collectExtensionTools(
       }
       seen.add(tool.id)
       options.assertSafe?.(tool.id)
+      if (tool.executionPolicy) {
+        const { authority, compute } = tool.executionPolicy
+        if (authority !== 'read_only' || compute.network !== false ||
+            !['inline', 'wasm', 'sandboxed_worker'].includes(compute.backend) ||
+            !['none', 'ephemeral'].includes(compute.filesystem) ||
+            !Number.isFinite(compute.maxMemoryMb) || compute.maxMemoryMb <= 0 ||
+            !Number.isFinite(compute.maxCpuSeconds) || compute.maxCpuSeconds <= 0 ||
+            (compute.backend !== 'sandboxed_worker' && compute.filesystem !== 'none')) {
+          throw new Error(`Invalid execution policy for "${tool.id}"`)
+        }
+        if (!options.assertExecutionPolicy) throw new Error(`Host must enforce the execution policy for "${tool.id}"`)
+        options.assertExecutionPolicy(tool.executionPolicy, tool.id)
+      }
       tools.push(tool)
     }
   }
@@ -98,7 +127,7 @@ export type CardRegistry<Component> = Record<string, Component>
 export function buildCardRegistry<Component>(
   providers: ReadonlyArray<ExtensionUiProvider<Component>>,
 ): CardRegistry<Component> {
-  const registry: CardRegistry<Component> = {}
+  const registry: CardRegistry<Component> = Object.create(null) as CardRegistry<Component>
   for (const provider of providers) {
     for (const card of provider.cards) {
       if (card.kind in registry) {
