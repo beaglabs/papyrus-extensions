@@ -12,6 +12,9 @@ Papyrus extensions are versioned NPM packages that add **read-only agent tools**
 | [`papyrus-gnss`](./packages/gnss) | First domain pack: GNSS / satellite-orbit parsers (TLE, OMM, SP3, NMEA, SINEX) and SVG viewer cards. |
 | [`papyrus-viewer-3d`](./packages/viewer-3d) | Shared 3D viewer primitive: a renderer-agnostic scene contract and the `viewer_3d` card. Domain packs emit typed scenes; the WebGL engine is vendored here once, after review, so no pack bundles its own. |
 
+| [`papyrus-computationals`](./packages/computationals) | Computationals: typed scientific operators, execution pipelines, validation, artifacts and provenance. |
+| [`papyrus-rendering`](./packages/rendering) | Shared scientific view and result schemas; browser renderer implementation remains future work. |
+
 ## The contract
 
 An extension exposes two optional providers:
