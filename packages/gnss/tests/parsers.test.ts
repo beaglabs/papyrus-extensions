@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseNmea, parseOmm, parseSinex, parseSp3, parseTle } from '../src/parsers.js'
 
 const ISS_TLE = `ISS (ZARYA)
@@ -20,6 +20,25 @@ const ISS_OMM = `<omm id="CCSDS_OMM_VERS" version="2.0"><body><segment><metadata
   <REV_AT_EPOCH>56353</REV_AT_EPOCH><BSTAR>-0.11606E-4</BSTAR>
   <MEAN_MOTION_DOT>-0.00002182</MEAN_MOTION_DOT><MEAN_MOTION_DDOT>0.0</MEAN_MOTION_DDOT>
 </tleParameters></data></segment></body></omm>`
+
+const ISS_OMM_KVN = [...ISS_OMM.matchAll(/<([A-Z_]+)>([^<]+)<\/\1>/g)]
+  .map(([, key, value]) => `${key} = ${value}`)
+  .join('\n')
+
+const originalTimezone = process.env['TZ']
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  // Keep the 2008 orbital elements close to their epoch, and give both
+  // parsers exactly the same propagation start rather than separate "now"s.
+  vi.setSystemTime(new Date('2008-09-20T12:25:40.104Z'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  if (originalTimezone === undefined) delete process.env['TZ']
+  else process.env['TZ'] = originalTimezone
+})
 
 const SP3 = `#dP2024  9 30  0  0  0.00000000       9 d+D   IGS20 BHN ORBVW
 *  2024  9 30  0  0  0.00000000
@@ -63,23 +82,39 @@ describe('parseTle', () => {
 })
 
 describe('parseOmm', () => {
-  it('rebuilds the orbit and matches the native TLE ground track', () => {
-    const omm = parseOmm(ISS_OMM)
-    const tle = parseTle(ISS_TLE)
-    expect(omm.kind).toBe('orbit_view')
-    expect(omm.source).toBe('omm')
-    expect(omm.object.noradId).toBe(25544)
-    expect(omm.elements.inclinationDeg).toBeCloseTo(tle.elements.inclinationDeg, 4)
-    // Compare a few sub-points (both propagate from "now", so index-aligned).
-    const n = Math.min(omm.groundTrack.length, tle.groundTrack.length)
-    let maxDelta = 0
-    for (let i = 0; i < n; i += 20) {
-      const a = tle.groundTrack[i]!
-      const b = omm.groundTrack[i]!
-      maxDelta = Math.max(maxDelta, Math.hypot(a.lat - b.lat, a.lon - b.lon))
-    }
-    expect(maxDelta).toBeLessThan(0.05)
-  })
+  it.each(['UTC', 'America/New_York', 'Asia/Tokyo'])(
+    'matches the native TLE ground track in %s for XML and KVN',
+    (timezone) => {
+      process.env['TZ'] = timezone
+      const tle = parseTle(ISS_TLE)
+      for (const input of [ISS_OMM, ISS_OMM_KVN]) {
+        const omm = parseOmm(input)
+        expect(omm.kind).toBe('orbit_view')
+        expect(omm.source).toBe('omm')
+        expect(omm.object.noradId).toBe(25544)
+        expect(omm.elements.inclinationDeg).toBeCloseTo(tle.elements.inclinationDeg, 4)
+        expect(omm.groundTrack).toHaveLength(tle.groundTrack.length)
+        let maxDelta = 0
+        for (let i = 0; i < tle.groundTrack.length; i += 1) {
+          const a = tle.groundTrack[i]!
+          const b = omm.groundTrack[i]!
+          expect(b.t).toBe(a.t)
+          expect(b.altKm).toBeCloseTo(a.altKm, 6)
+          maxDelta = Math.max(maxDelta, Math.hypot(a.lat - b.lat, a.lon - b.lon))
+        }
+        expect(maxDelta).toBeLessThan(0.05)
+      }
+    },
+  )
+
+  it.each(['Z', '+00:00', '-03:00'])(
+    'preserves an explicit %s epoch timezone',
+    (zone) => {
+      const epoch = zone === '-03:00' ? '2008-09-20T09:25:40.104192' : '2008-09-20T12:25:40.104192'
+      const input = ISS_OMM.replace('2008-09-20T12:25:40.104192', epoch + zone)
+      expect(parseOmm(input).groundTrack).toEqual(parseTle(ISS_TLE).groundTrack)
+    },
+  )
 
   it('throws when a required mean element is missing', () => {
     expect(() => parseOmm('<omm><INCLINATION>51.6</INCLINATION></omm>')).toThrow(/missing required field/)

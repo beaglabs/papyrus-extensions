@@ -128,7 +128,10 @@ function tleChecksum(line: string): number {
 }
 
 function epochToTle(iso: string): string {
-  const d = new Date(iso)
+  // SGP4 OMM epochs are UTC, even when the timestamp omits a zone suffix.
+  // Date would otherwise interpret them in the host's local timezone.
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso)
+  const d = new Date(hasZone ? iso : `${iso}Z`)
   if (Number.isNaN(d.getTime())) throw new Error(`OMM has an invalid EPOCH: ${iso}`)
   const year = d.getUTCFullYear()
   const doy = (d.getTime() - Date.UTC(year, 0, 1)) / 86_400_000 + 1
