@@ -8,6 +8,7 @@
  */
 import type { ExtensionToolProvider } from 'papyrus-extension-sdk'
 import { parseNmea, parseOmm, parseSinex, parseSp3, parseTle } from './parsers.js'
+import { orbitToViewer3d } from './viewer3d.js'
 
 const asString = (input: Record<string, unknown>, key: string): string => {
   const value = input[key]
@@ -24,7 +25,7 @@ export const gnssToolProvider: ExtensionToolProvider = {
     {
       id: 'parseTle',
       description:
-        'Parse a Two-Line Element set (TLE) and return SGP4 classical orbital elements plus a one-revolution ground track for the orbital viewer. Pass the raw TLE text unchanged.',
+        'Parse a Two-Line Element set (TLE) and return SGP4 classical orbital elements plus a one-revolution ground track for the 2D orbital viewer. Pass the raw TLE text unchanged.',
       authority: 'read_only',
       inputSchema: {
         type: 'object',
@@ -40,9 +41,27 @@ export const gnssToolProvider: ExtensionToolProvider = {
       execute: (input) => parseTle(asString(input, 'tle')),
     },
     {
+      id: 'viewTle3d',
+      description:
+        'Render a TLE satellite orbit as an interactive 3D Earth scene using SGP4. Prefer this tool when the user asks to show, view, visualize, inspect, or explore a TLE orbit in 3D or on a globe.',
+      authority: 'read_only',
+      inputSchema: {
+        type: 'object',
+        required: ['tle'],
+        additionalProperties: false,
+        properties: {
+          tle: {
+            type: 'string',
+            description: 'Raw TLE text: an optional name line, then line 1 ("1 ...") and line 2 ("2 ...").',
+          },
+        },
+      },
+      execute: (input) => orbitToViewer3d(parseTle(asString(input, 'tle')), 'viewTle3d'),
+    },
+    {
       id: 'parseOmm',
       description:
-        'Parse an Orbit Mean-Elements Message (OMM), in KVN or XML form, into the same orbital view as parseTle, including an SGP4 ground track.',
+        'Parse an Orbit Mean-Elements Message (OMM), in KVN or XML form, into the same 2D orbital view as parseTle, including an SGP4 ground track.',
       authority: 'read_only',
       inputSchema: {
         type: 'object',
@@ -53,6 +72,21 @@ export const gnssToolProvider: ExtensionToolProvider = {
         },
       },
       execute: (input) => parseOmm(asString(input, 'omm')),
+    },
+    {
+      id: 'viewOmm3d',
+      description:
+        'Render an OMM satellite orbit as an interactive 3D Earth scene using SGP4. Prefer this tool when the user asks to show, view, visualize, inspect, or explore an OMM orbit in 3D or on a globe.',
+      authority: 'read_only',
+      inputSchema: {
+        type: 'object',
+        required: ['omm'],
+        additionalProperties: false,
+        properties: {
+          omm: { type: 'string', description: 'Raw OMM text (KVN key/value lines or XML).' },
+        },
+      },
+      execute: (input) => orbitToViewer3d(parseOmm(asString(input, 'omm')), 'viewOmm3d'),
     },
     {
       id: 'parseSp3',
